@@ -16,6 +16,7 @@ from prefect.utilities.processutils import get_sys_executable, run_process
 
 if TYPE_CHECKING:
     from prefect.client.schemas.objects import FlowRun
+    from prefect.runner._control_channel import ControlChannel
     from prefect.runner.storage import RunnerStorage
 
 
@@ -40,6 +41,7 @@ class EngineCommandStarter:
         env: dict[str, str | None] | None = None,
         stream_output: bool = True,
         heartbeat_seconds: int | None = None,
+        control_channel: ControlChannel | None = None,
     ) -> None:
         self._tmp_dir = tmp_dir
         self._storage = storage
@@ -49,6 +51,7 @@ class EngineCommandStarter:
         self._env = env or {}
         self._stream_output = stream_output
         self._heartbeat_seconds = heartbeat_seconds
+        self._control_channel = control_channel
 
     async def start(
         self,
@@ -68,6 +71,16 @@ class EngineCommandStarter:
         if sys.platform == "win32":
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
+        # Register the flow run with the control channel before spawning so
+        # the child can connect back as soon as it starts. Returned port +
+        # token are injected into the child env via PREFECT__CONTROL_PORT
+        # and PREFECT__CONTROL_TOKEN; the child-side listener picks them up.
+        control_env: dict[str, str] = {}
+        if self._control_channel is not None:
+            port, token = self._control_channel.register(flow_run.id)
+            control_env["PREFECT__CONTROL_PORT"] = str(port)
+            control_env["PREFECT__CONTROL_TOKEN"] = token
+
         # Build env following runner.py lines 907-929
         env: dict[str, str | None] = {**self._env}
         env.update(get_current_settings().to_environment_variables(exclude_unset=True))
@@ -80,6 +93,7 @@ class EngineCommandStarter:
                     else {}
                 ),
                 "PREFECT__ENABLE_CANCELLATION_AND_CRASHED_HOOKS": "false",
+                **control_env,
                 **(
                     {"PREFECT__FLOW_ENTRYPOINT": self._entrypoint}
                     if self._entrypoint
