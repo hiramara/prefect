@@ -1,0 +1,129 @@
+---
+title: Building Your First Workflow with Prefect
+sidebarTitle: First Workflow Tutorial
+description: Learn how to create, run, and monitor a Prefect workflow from scratch.
+---
+
+import { Tip, Warning, Note } from '/snippets/callouts.mdx'
+
+## Overview
+
+This tutorial walks you through creating your first Prefect workflow. By the end,
+you'll have a working flow that fetches data, transforms it, and saves the results —
+all with built-in observability and retry logic.
+
+## Prerequisites
+
+- Python 3.9 or later
+- Prefect installed (`pip install prefect`)
+- A Prefect Cloud account or local Prefect server running
+
+## Step 1: Define Your Tasks
+
+Tasks are the building blocks of a Prefect flow. Each task represents a discrete
+unit of work. Decorate any Python function with `@task` to make it a Prefect task.
+
+```python
+from prefect import task
+
+@task(retries=3, retry_delay_seconds=10)
+def fetch_data(url: str) -> dict:
+    """Fetch data from a remote API endpoint."""
+    import httpx
+    response = httpx.get(url)
+    response.raise_for_status()
+    return response.json()
+
+@task
+def transform_data(raw: dict) -> list[dict]:
+    """Normalize and filter the raw API response."""
+    return [
+        {"id": item["id"], "value": item["value"]}
+        for item in raw.get("results", [])
+        if item.get("active", False)
+    ]
+
+@task
+def save_results(records: list[dict], output_path: str) -> int:
+    """Persist transformed records to a JSON file."""
+    import json
+    from pathlib import Path
+    Path(output_path).write_text(json.dumps(records, indent=2))
+    return len(records)
+```
+
+<Tip>
+Add `retries=3` to tasks that call external services. Prefect will automatically
+retry on failure without any extra code.
+</Tip>
+
+## Step 2: Compose Your Flow
+
+A flow orchestrates tasks and defines the execution order. Use the `@flow` decorator
+to turn a regular Python function into a Prefect flow.
+
+```python
+from prefect import flow
+
+@flow(name="data-pipeline", log_prints=True)
+def my_workflow(
+    api_url: str = "https://api.example.com/data",
+    output_path: str = "results.json",
+) -> int:
+    """End-to-end pipeline: fetch → transform → save."""
+    raw = fetch_data(api_url)
+    records = transform_data(raw)
+    count = save_results(records, output_path)
+    print(f"Saved {count} records to {output_path}")
+    return count
+```
+
+## Step 3: Run the Flow
+
+You can run a flow just like any Python function:
+
+```bash
+python my_workflow.py
+```
+
+Or trigger it from the CLI:
+
+```bash
+prefect run flow my_workflow.py:my_workflow
+```
+
+<Note>
+When `log_prints=True` is set, all `print()` calls inside the flow and its tasks
+are captured as Prefect log entries visible in the UI.
+</Note>
+
+## Step 4: Schedule the Flow
+
+Deploy your flow with a schedule so it runs automatically:
+
+```python
+if __name__ == "__main__":
+    my_workflow.serve(
+        name="nightly-data-pipeline",
+        cron="0 2 * * *",  # every day at 2 AM
+        parameters={"output_path": "/data/results.json"},
+    )
+```
+
+```bash
+python my_workflow.py
+```
+
+This starts a long-running process that executes the flow on the defined schedule
+and streams logs back to Prefect Cloud.
+
+<Warning>
+`serve()` keeps the process alive. For production deployments, run it inside a
+container or use `prefect deploy` with a work pool instead.
+</Warning>
+
+## Next Steps
+
+- [Deployments](/concepts/deployments) — package and deploy flows to remote infrastructure
+- [Work Pools](/concepts/work-pools) — route flow runs to different execution environments
+- [Blocks](/concepts/blocks) — store credentials and configuration securely
