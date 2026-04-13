@@ -1,0 +1,81 @@
+---
+title: {{ title }}
+sidebarTitle: {{ sidebar_title }}
+description: {{ description }}
+---
+
+import { Badge } from '/snippets/badge.mdx'
+
+# `{{ class_or_function_name }}`
+
+<Badge variant="{{ badge_variant }}" label="{{ badge_label }}" />
+
+{{ summary_description }}
+
+## Overview
+
+{{ overview_paragraph }}
+
+```python
+from prefect import {{ import_name }}
+```
+
+## Parameters
+
+<ParamField path="{{ param_name }}" type="{{ param_type }}" required>
+  {{ param_description }}
+</ParamField>
+
+<ParamField path="{{ optional_param_name }}" type="{{ optional_param_type }}" default="{{ default_value }}">
+  {{ optional_param_description }}
+</ParamField>
+
+## Returns
+
+`{{ return_type }}` — {{ return_description }}
+
+## Raises
+
+| Exception | Description |
+|-----------|-------------|
+| `{{ exception_type }}` | {{ exception_description }} |
+
+## Examples
+
+### Basic usage
+
+```python
+from prefect import flow, {{ import_name }}
+
+@flow
+def my_flow():
+    result = {{ class_or_function_name }}({{ example_args }})
+    return result
+```
+
+### Advanced usage
+
+```python
+from prefect import flow, {{ import_name }}
+from prefect.logging import get_run_logger
+
+@flow
+def my_flow():
+    logger = get_run_logger()
+    result = {{ class_or_function_name }}(
+        {{ advanced_example_args }}
+    )
+    logger.info(f"Result: {result}")
+    return result
+```
+
+## Notes
+
+<Note>
+  {{ important_note }}
+</Note>
+
+## See also
+
+- [{{ related_concept }}]({{ related_concept_link }})
+- [{{ related_api }}]({{ related_api_link }})
